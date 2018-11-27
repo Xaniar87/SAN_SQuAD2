@@ -1,4 +1,7 @@
 '''
+Updated: Nov. 25 2018
+by: Zaniar Ardalan
+
 SAN model
 Created October, 2017
 Author: xiaodl@microsoft.com
@@ -16,6 +19,13 @@ from .similarity import DeepAttentionWrapper, FlatSimilarityWrapper, SelfAttnWra
 from .similarity import AttentionWrapper
 from .san import SAN
 from .classifier import Classifier
+import logging
+from my_utils.log_wrapper import create_logger
+import argparse
+from config import set_args
+from .similarity import ConvAtt
+
+
 
 class DNetwork(nn.Module):
     """Network for SAN doc reader."""
@@ -127,9 +137,20 @@ class DNetwork(nn.Module):
             idx = -2 if self.opt['elmo_self_att_on'] else -1
             doc_att_input = torch.cat([doc_att_input, doc_elmo[idx]], 2)
             query_att_input = torch.cat([query_att_input, query_elmo[idx]], 2)
-
+        # setup logger
+        args = set_args()
+        logger =  create_logger(__name__, to_disk=True, log_file=args.log_file)
+        # logger.warning('doc_self_hiddens {}{}{}'.format(doc_self_hiddens.output_size,doc_mem_gen.output_size,query_sum_attn.output_size))
+        # logger.warning('before att {}{}{}'.format(doc_att_input.shape,query_att_input.shape, query_mask.shape,query_low.shape,query_mem_hiddens.shape ))
+        # before att torch.Size([64, 246, 1412])torch.Size([64, 37, 1412])torch.Size([64, 37])
+        # s=ConvAtt(doc_att_input,query_att_input,0.5)
+        # s=s.cuda()
+        # a=s()
         doc_attn_hiddens = self.deep_attn(doc_att_input, query_att_input, query_list, query_mask)
+        # logger.warning('before att {}'.format(doc_attn_hiddens.shape))
+        # before att torch.Size([64, 246, 768])
         doc_attn_hiddens = self.dropout(doc_attn_hiddens)
+        # doc_attn_hiddens = self.dropout(a)
         doc_mem_hiddens = self.doc_understand(torch.cat([doc_attn_hiddens] + doc_list, 2), doc_mask)
         doc_mem_hiddens = self.dropout(doc_mem_hiddens)
         doc_mem_inputs = torch.cat([doc_attn_hiddens] + doc_list, 2)
@@ -144,7 +165,9 @@ class DNetwork(nn.Module):
             doc_mem = doc_mem_hiddens
         query_mem = self.query_sum_attn(query_mem_hiddens, query_mask)
         start_scores, end_scores = self.decoder(doc_mem, query_mem, doc_mask)
-
+        # logger.warning('query_mem {}'.format(query_mem.shape))
+        # logger.warning('hiddens {}'.format(query_mem_hiddens.shape))
+        
         pred_score = None
         if self.classifier is not None:
             doc_sum = self.doc_sum_attn(doc_mem, doc_mask)
