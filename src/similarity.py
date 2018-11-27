@@ -361,3 +361,84 @@ class FlatSimilarityWrapper(nn.Module):
     def forward(self, x1, x2, mask):
         scores = self.score_func(x1, x2, mask)
         return scores
+    
+    
+class CNNAttention(nn.Module):
+    def __init__(self,r,c):
+        super(CNNAttention, self).__init__()
+        self.conv1=nn.Conv2d(1,1, kernel_size=5,stride=1, padding=0)
+        self.pool1=nn.MaxPool2d(kernel_size=4, stride=4, padding=0)
+        self.row_size=r
+        self.colu_size=c
+        self.fc1=nn.Linear(int((r-4)/2)*352,1412)
+        self.fc2=nn.Linear(1412,352)
+        
+        
+        
+    def forward(self,x,doc,w):
+        # print(x.shape)
+        x=F.relu(self.conv1(x))
+        # print(x.shape)
+        self.parameter=x.shape
+        x=self.pool1(x)
+        # print(x.shape)
+        
+        x=x.view(-1,int((self.row_size-4)/4)*352)# it's weight normalization
+        # print(x.shape)
+        # print('r',self.row_size)
+        # x=F.relu(self.fc1(x))
+        # x=F.relu(self.fc2(x))
+        # doc=F.relu(self.fc2(doc))
+        # # print(x.shape)
+        # # doc=doc.transpose_(0,1)
+        # # print('doc',doc.shape)
+        # x=torch.cat((w*x,(1-w)*doc),1)# use adaptive combination of CNNatt with original vector
+        # print(x.shape)
+        ccc=nn.Linear(len(x[0,:]),768)# NN for combining CNNatt with original vector
+        ccc=ccc.cuda()
+        x=ccc(x)
+        # x=x.resize_(1,1,1412)
+        # print(x.shape)
+        return(x)
+        
+class ConvAtt(nn.Module):
+    def __init__(self,doc,q,w):
+        super(ConvAtt, self).__init__()
+        self.comb_w=w
+        self.doc=doc
+        self.q=q
+                
+    def forward(self):
+        out=torch.zeros(len(self.doc[:,0,0]),len(self.doc[0,:,0]),768)
+        for i in range(len(self.doc[:,0,0])):
+            for j in range(len(self.doc[0,:,0])):
+                
+                if len(self.q[0,:,0])%2 == 0:
+                    if j<26:
+                        x=torch.cat((self.doc[i,0:50,:],self.q[i,:,:]),0)
+                        # print(x.shape)
+                    elif j>len(self.doc[0,:,0])-25:
+                        x=torch.cat((self.doc[i,len(self.doc[0,:,0])-50:len(self.doc[0,:,0]),:],self.q[i,:,:]),0)
+                    else:
+                        x=torch.cat((self.doc[i,j-25:j+25,:],self.q[i,:,:]),0)
+                else:
+                    if j<26:
+                        x=torch.cat((self.doc[i,0:51,:],self.q[i,:,:]),0)
+                        # print(x.shape)
+                    elif j>len(self.doc[0,:,0])-25:
+                        x=torch.cat((self.doc[i,len(self.doc[0,:,0])-51:len(self.doc[0,:,0]),:],self.q[i,:,:]),0)
+                    else:
+                        x=torch.cat((self.doc[i,j-25:j+26,:],self.q[i,:,:]),0)
+                    
+                                 
+                x=x.reshape(1,1,len(x[:,0]),1412)
+                d=self.doc[i,j,:]
+                d=d.reshape(1,1412)
+                s=CNNAttention(int(len(x[0,0,:,0])),int(len(self.doc[0,0,:])))
+                s=s.cuda()
+                out[i,j,:]= s(x,d,self.comb_w)
+                
+
+        return(out)
+        
+        
